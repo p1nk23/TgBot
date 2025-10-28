@@ -4,3 +4,7 @@ class Navigation(StatesGroup):
     current_forder_id = State()
 class EditNode(StatesGroup):
     waiting_for_content = State()
+class AddNode(StatesGroup):
+    waiting_for_content = State()
+class SearchQuery(StatesGroup):
+    waiting_for_query = State()
