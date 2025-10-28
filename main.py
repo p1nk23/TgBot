@@ -18,12 +18,14 @@ async def main():
     dp["db_pool"] = pool
 
     await bot.set_my_commands([
-        BotCommand(command="/start", description="Начать работу"),
-        BotCommand(command="/ls", description="Показать содержимое текущей папки"),
-        BotCommand(command="/cd", description="Перейти в папку (используй ID)"),
-        BotCommand(command="/add", description="Добавить узел")      
-        
-    ])
+    BotCommand(command="/start", description="Начать работу"),
+    BotCommand(command="/ls", description="Показать содержимое текущей папки"),
+    BotCommand(command="/cd", description="Перейти в папку по ID"),
+    BotCommand(command="/root", description="Вернуться в корень"),
+    BotCommand(command="/add", description="Добавить узел"),
+    BotCommand(command="/rm", description="Удалить узел по ID"),
+    BotCommand(command="/edit", description="Изменить текст узла"),
+])
 
     register_handlers(dp)
 
