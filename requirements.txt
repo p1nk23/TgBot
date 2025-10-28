@@ -1,4 +1,4 @@
-asyncpg
-aiogram=
+asyncpg=0.30.0
+aiogram=3.22.0
 APScheduler
 python-decouple
