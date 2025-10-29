@@ -221,12 +221,21 @@ async def view_media(callback: CallbackQuery, db_pool):
     await callback.answer()
 
 
+
+
+
+
+
+
+
+
 @router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
     await message.answer(
         "Добро пожаловать в хранилище БРО"
     )
+    await cmd_ls(message, state, db_pool)
 
 
 @router.callback_query(F.data.startswith("rm_"))
@@ -244,6 +253,12 @@ async def rm_callback(callback: CallbackQuery, db_pool):
         await callback.message.edit_text(f"✅ Узел {node_id} удалён.")
     else:
         await callback.answer("Узел не найден или не принадлежит вам.", show_alert=True)
+
+
+
+
+
+
 
 
 @router.message(Command("ls"))
@@ -332,16 +347,24 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
 
 
 
+
+
+
+
+ 
 # ВОЗВРАТ В КОРЕНЬ
 @router.callback_query(F.data == "cd_root")
-async def cd_to_root(callback: CallbackQuery, state: FSMContext):
+async def cd_to_root(callback: CallbackQuery, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
     await callback.message.edit_text("📂 Вы вернулись в корневую папку.")
+    await cmd_ls(callback.message, state, db_pool)
     await callback.answer()
+
 @router.message(Command("root"))
-async def cmd_root(message: Message, state: FSMContext):
+async def cmd_root(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
     await message.answer("📂 Вы вернулись в корневую папку.")
+    await cmd_ls(message, state, db_pool)
 
 #ПЕРЕМЕЩЕНИЕ ПО ПАПКАМ
 @router.callback_query(F.data.startswith("cd_") & F.data.len() > 3)  # длина > "cd_" (3 символа)
