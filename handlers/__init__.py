@@ -98,7 +98,7 @@ async def search_nodes(pool, user_id: int, query: str):
         return rows
 
 
-router.message(F.document)
+@router.message(F.document)
 async def handle_document(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.document.file_id
@@ -344,12 +344,6 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
 
     # Отправляем сообщение
     await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-
-
-
-
-
-
 
  
 # ВОЗВРАТ В КОРЕНЬ
