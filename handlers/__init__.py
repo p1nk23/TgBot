@@ -440,17 +440,6 @@ async def cmd_cd(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=folder_id)
     await cmd_ls(message, state, db_pool)
 
-
-
-
-
-
-
-
-
-
-
-
 #ДОБАВЛЕНИЕ ПАПКИ
 @router.message(Command("add"))
 async def cmd_add(message: Message, state: FSMContext, db_pool):
