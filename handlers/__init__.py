@@ -101,7 +101,7 @@ async def search_nodes(pool, user_id: int, query: str):
         return rows
 
 #СОХРАНЕНИЕ МЕДИА
-router.message(F.document)
+@router.message(F.document)
 async def handle_document(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.document.file_id
@@ -114,6 +114,7 @@ async def handle_document(message: Message, state: FSMContext, db_pool):
         db_pool, user_id, current_folder_id, caption, file_id, "document"
     )
     await message.answer(f"📎 Документ сохранён! ID: {node_id}")
+    await cmd_ls(message, state, db_pool)
 
 @router.message(F.photo)
 async def handle_photo(message: Message, state: FSMContext, db_pool):
@@ -136,6 +137,7 @@ async def handle_photo(message: Message, state: FSMContext, db_pool):
         )
     node_id = row["id"]
     await message.answer(f"🖼️ Фото сохранено! ID: {node_id}")
+    await cmd_ls(message, state, db_pool)
 
 @router.message(F.video)
 async def handle_video(message: Message, state: FSMContext, db_pool):
@@ -150,6 +152,7 @@ async def handle_video(message: Message, state: FSMContext, db_pool):
         db_pool, user_id, current_folder_id, caption, file_id, "video"
     )
     await message.answer(f"🎥 Видео сохранено! ID: {node_id}")
+    await cmd_ls(message, state, db_pool)
 
 @router.message(F.audio)
 async def handle_audio(message: Message, state: FSMContext, db_pool):
@@ -618,7 +621,7 @@ async def cmd_menu(message: Message, state: FSMContext, db_pool):
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
 
-    text = "퀵-меню действий:\n\n"
+    text = "меню действий:\n\n"
 
     if current_folder_id is None:
         text += "📍 Вы в корневой папке.\n"
