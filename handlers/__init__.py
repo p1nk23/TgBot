@@ -10,6 +10,7 @@ from handlers.states import AddNode, EditNode, SearchQuery
 router = Router()
 logger = logging.getLogger(__name__)
 
+#ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 async def get_children(pool, user_id: int, parent_id: Optional[int]):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -97,7 +98,7 @@ async def search_nodes(pool, user_id: int, query: str):
         """, user_id, f"%{query}%")
         return rows
 
-
+#СОХРАНЕНИЕ МЕДИА
 router.message(F.document)
 async def handle_document(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
@@ -220,15 +221,7 @@ async def view_media(callback: CallbackQuery, db_pool):
 
     await callback.answer()
 
-
-
-
-
-
-
-
-
-
+#ФУНКЦИЯ СТАРТА
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
@@ -237,7 +230,7 @@ async def cmd_start(message: Message, state: FSMContext, db_pool):
     )
     await cmd_ls(message, state, db_pool)
 
-
+#УДАЛЕНИЕ ПАПКИ
 @router.callback_query(F.data.startswith("rm_"))
 async def rm_callback(callback: CallbackQuery, db_pool):
     try:
@@ -254,19 +247,13 @@ async def rm_callback(callback: CallbackQuery, db_pool):
     else:
         await callback.answer("Узел не найден или не принадлежит вам.", show_alert=True)
 
-
-
-
-
-
-
-
+#ОТОБРАЖЕНИЕ ДОЧЕРНИХ ПАПОК
 @router.message(Command("ls"))
 async def cmd_ls(message: Message, state: FSMContext, db_pool):
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
 
-    user_id = message.from_user.id
+    user_id = message.chat.id
     children = await get_children(db_pool, user_id, current_folder_id)
 
     # === Заголовок: где мы находимся ===
@@ -345,30 +332,24 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
     # Отправляем сообщение
     await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
-
-
-
-
-
-
- 
 # ВОЗВРАТ В КОРЕНЬ
 @router.callback_query(F.data == "cd_root")
 async def cd_to_root(callback: CallbackQuery, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
-    await callback.message.edit_text("📂 Вы вернулись в корневую папку.")
+    await callback.message.answer("📂 Вы вернулись в корневую папку1111.")
     await cmd_ls(callback.message, state, db_pool)
-    await callback.answer()
 
 @router.message(Command("root"))
 async def cmd_root(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
-    await message.answer("📂 Вы вернулись в корневую папку.")
+    await message.answer("📂 Вы вернулись в корневую папку222.")
     await cmd_ls(message, state, db_pool)
 
 #ПЕРЕМЕЩЕНИЕ ПО ПАПКАМ
+#Вызывается при переходе в папке по кнопкам
 @router.callback_query(F.data.startswith("cd_") & F.data.len() > 3)  # длина > "cd_" (3 символа)
 async def cd_to_folder(callback: CallbackQuery, state: FSMContext, db_pool):
+    print("cd_to_folder")
     try:
         folder_id = int(callback.data[3:])  # берём всё после "cd_"
     except ValueError:
@@ -388,8 +369,10 @@ async def cd_to_folder(callback: CallbackQuery, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=folder_id)
     await callback.message.edit_text(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
     await callback.answer()
+
 @router.callback_query(F.data.startswith("cd_"))
 async def cd_callback(callback: CallbackQuery, state: FSMContext, db_pool):
+    print("cd_callback")
     data = callback.data
 
     if data == "cd_root":
@@ -423,8 +406,10 @@ async def cd_callback(callback: CallbackQuery, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=folder_id)
     await callback.message.edit_text(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
     await callback.answer()
+
 @router.message(Command("cd"))
 async def cmd_cd(message: Message, state: FSMContext, db_pool):
+    print("cmd_cd")
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.answer("Использование: /cd <ID_папки>")
@@ -452,6 +437,18 @@ async def cmd_cd(message: Message, state: FSMContext, db_pool):
 
     await state.update_data(current_folder_id=folder_id)
     await message.answer(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
+
+
+
+
+
+
+
+
+
+
+
+
 #ДОБАВЛЕНИЕ ПАПКИ
 @router.message(Command("add"))
 async def cmd_add(message: Message, state: FSMContext, db_pool):
@@ -500,7 +497,6 @@ async def cmd_rm(message: Message, db_pool):
         await message.answer("❌ Узел не найден или не принадлежит вам.")
 
 #РЕДАКТИРОВАНИЕ
-
 @router.message(Command("edit"))
 async def cmd_edit(message: Message, db_pool):
     parts = message.text.split(maxsplit=2)  # /edit <id> <текст>
@@ -653,8 +649,6 @@ async def cmd_menu(message: Message, state: FSMContext, db_pool):
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer(text, reply_markup=keyboard)
 
-
-
 @router.callback_query(F.data == "action_add")
 async def action_add(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddNode.waiting_for_content)
@@ -741,8 +735,6 @@ async def process_search_query(message: Message, state: FSMContext, db_pool):
                 await message.answer(part)
 
     await state.clear()  # выходим из состояния поиска
-
-
 
 def register_handlers(dp):
     dp.include_router(router)
