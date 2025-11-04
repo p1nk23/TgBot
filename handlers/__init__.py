@@ -367,46 +367,48 @@ async def cd_to_folder(callback: CallbackQuery, state: FSMContext, db_pool):
         return
 
     await state.update_data(current_folder_id=folder_id)
-    await callback.message.edit_text(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
+    await cmd_ls(callback.message, state, db_pool)
     await callback.answer()
 
-@router.callback_query(F.data.startswith("cd_"))
-async def cd_callback(callback: CallbackQuery, state: FSMContext, db_pool):
-    print("cd_callback")
-    data = callback.data
+#Нафига вообще нужно?
+# @router.callback_query(F.data.startswith("cd_"))
+# async def cd_callback(callback: CallbackQuery, state: FSMContext, db_pool):
+#     print("cd_callback")
+#     data = callback.data
 
-    if data == "cd_root":
-        await state.update_data(current_folder_id=None)
-        await callback.message.edit_text("📂 Вы вернулись в корневую папку.")
-        await callback.answer()
-        return
+#     if data == "cd_root":
+#         await state.update_data(current_folder_id=None)
+#         await callback.message.edit_text("📂 Вы вернулись в корневую папку.")
+#         await callback.answer()
+#         return
 
-    try:
-        folder_id = int(data[3:])
-    except ValueError:
-        await callback.answer("Неверный ID папки.", show_alert=True)
-        return
+#     try:
+#         folder_id = int(data[3:])
+#     except ValueError:
+#         await callback.answer("Неверный ID папки.", show_alert=True)
+#         return
 
-    user_id = callback.from_user.id
-    async with db_pool.acquire() as conn:
-        node = await conn.fetchrow(
-            "SELECT file_type FROM nodes WHERE id = $1 AND user_id = $2",
-            folder_id, user_id
-        )
-    if not node:
-        await callback.answer("Папка не найдена или не принадлежит вам.", show_alert=True)
-        return
+#     user_id = callback.from_user.id
+#     async with db_pool.acquire() as conn:
+#         node = await conn.fetchrow(
+#             "SELECT file_type FROM nodes WHERE id = $1 AND user_id = $2",
+#             folder_id, user_id
+#         )
+#     if not node:
+#         await callback.answer("Папка не найдена или не принадлежит вам.", show_alert=True)
+#         return
 
-    # 🔴 Если это медиа — нельзя заходить внутрь!
-    if node["file_type"] is not None:
-        await callback.answer("❌ Это медиафайл, а не папка. Нажмите «👁️ Просмотр».", show_alert=True)
-        return
+#     # 🔴 Если это медиа — нельзя заходить внутрь!
+#     if node["file_type"] is not None:
+#         await callback.answer("❌ Это медиафайл, а не папка. Нажмите «👁️ Просмотр».", show_alert=True)
+#         return
 
-    # Иначе — разрешаем переход
-    await state.update_data(current_folder_id=folder_id)
-    await callback.message.edit_text(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
-    await callback.answer()
+#     # Иначе — разрешаем переход
+#     await state.update_data(current_folder_id=folder_id)
+#     await callback.message.edit_text(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
+#     await callback.answer()
 
+#Вызывается при вызове через чат
 @router.message(Command("cd"))
 async def cmd_cd(message: Message, state: FSMContext, db_pool):
     print("cmd_cd")
@@ -436,7 +438,7 @@ async def cmd_cd(message: Message, state: FSMContext, db_pool):
         return
 
     await state.update_data(current_folder_id=folder_id)
-    await message.answer(f"✅ Перешёл в папку {folder_id}. Используй /ls для просмотра.")
+    await cmd_ls(message, state, db_pool)
 
 
 
