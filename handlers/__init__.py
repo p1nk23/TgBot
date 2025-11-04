@@ -11,6 +11,8 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 #ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+
+
 async def get_children(pool, user_id: int, parent_id: Optional[int]):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -232,7 +234,7 @@ async def cmd_start(message: Message, state: FSMContext, db_pool):
 
 #УДАЛЕНИЕ ПАПКИ
 @router.callback_query(F.data.startswith("rm_"))
-async def rm_callback(callback: CallbackQuery, db_pool):
+async def rm_callback(callback: CallbackQuery, state: FSMContext, db_pool):
     try:
         node_id = int(callback.data[3:])
     except ValueError:
@@ -244,6 +246,8 @@ async def rm_callback(callback: CallbackQuery, db_pool):
 
     if deleted:
         await callback.message.edit_text(f"✅ Узел {node_id} удалён.")
+        await cmd_ls(callback.message, state, db_pool)
+        
     else:
         await callback.answer("Узел не найден или не принадлежит вам.", show_alert=True)
 
@@ -290,7 +294,7 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
             else:
                 prefix = "📁"
 
-            text += f"{prefix} <b>{node_id}</b>: {content}\n"
+            text += f"{prefix} {content}\n"
 
             # === Кнопки для узла ===
             buttons_row = []
@@ -303,7 +307,7 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
             else:
                 # Текстовый узел — можно открывать (как папку)
                 buttons_row.append(
-                    InlineKeyboardButton(text="📂 Открыть", callback_data=f"cd_{node_id}")
+                    InlineKeyboardButton(text= content, callback_data=f"cd_{node_id}")##dxfgsdfgsdfg
                 )
 
             # Редактирование и удаление — для всех
@@ -330,19 +334,18 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
     keyboard = InlineKeyboardMarkup(inline_keyboard=node_buttons + [action_buttons])
 
     # Отправляем сообщение
+
     await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 # ВОЗВРАТ В КОРЕНЬ
 @router.callback_query(F.data == "cd_root")
 async def cd_to_root(callback: CallbackQuery, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
-    await callback.message.answer("📂 Вы вернулись в корневую папку1111.")
     await cmd_ls(callback.message, state, db_pool)
 
 @router.message(Command("root"))
 async def cmd_root(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
-    await message.answer("📂 Вы вернулись в корневую папку222.")
     await cmd_ls(message, state, db_pool)
 
 #ПЕРЕМЕЩЕНИЕ ПО ПАПКАМ
@@ -437,8 +440,9 @@ async def cmd_cd(message: Message, state: FSMContext, db_pool):
         await message.answer("❌ Это медиафайл, а не папка. Используйте кнопку «👁️ Просмотр».")
         return
 
-    await state.update_data(current_folder_id=folder_id)
+    await state.update_data(current_folder_id=folder_id)    
     await cmd_ls(message, state, db_pool)
+
 
 #ДОБАВЛЕНИЕ ПАПКИ
 @router.message(Command("add"))
@@ -684,6 +688,8 @@ async def process_add_content(message: Message, state: FSMContext, db_pool):
     try:
         node_id = await create_node(db_pool, user_id, current_folder_id, content)
         await message.answer(f"✅ Узел создан! ID: {node_id}")
+        await cmd_ls(message, state, db_pool)
+
     except Exception as e:
         logger.exception("Ошибка при создании узла")
         await message.answer("❌ Не удалось создать узел.")

@@ -23,7 +23,7 @@ async def main():
     BotCommand(command="/cd", description="Перейти в папку по ID"),
     BotCommand(command="/root", description="Вернуться в корень"),
     BotCommand(command="/add", description="Добавить узел"),
-    BotCommand(command="/rm", description="Удалить узел по ID"),
+    BotCommand(command="/rm", description=" ить узел по ID"),
     BotCommand(command="/edit", description="Изменить текст узла"),
     BotCommand(command="/search", description="Поиск по заметкам"),
     BotCommand(command="/menu", description="Показать меню действий"),
