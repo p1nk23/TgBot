@@ -4,13 +4,34 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from typing import Optional
 import logging
+import re
 
 from handlers.states import AddNode, EditNode, SearchQuery
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-#ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# Константы для ограничений
+MAX_CONTENT_LENGTH = 2000  # Максимальная длина содержимого узла
+MAX_SEARCH_QUERY_LENGTH = 100  # Максимальная длина поискового запроса
+
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+
+def validate_content(content: str) -> bool:
+    """Проверяет, соответствует ли содержимое узла требованиям"""
+    if not content or not content.strip():
+        return False
+    if len(content) > MAX_CONTENT_LENGTH:
+        return False
+    return True
+
+def validate_search_query(query: str) -> bool:
+    """Проверяет, соответствует ли поисковый запрос требованиям"""
+    if not query or len(query.strip()) < 2:
+        return False
+    if len(query) > MAX_SEARCH_QUERY_LENGTH:
+        return False
+    return True
 
 
 async def get_children(pool, user_id: int, parent_id: Optional[int]):
@@ -56,8 +77,8 @@ async def delete_node(pool, user_id: int, node_id: int) -> bool:
 
 async def update_node_content(pool, user_id: int, node_id: int, new_content: str) -> bool:
     """Обновляет content узла, если он принадлежит пользователю."""
-    if not new_content.strip():
-        return False  # пустой текст не разрешён
+    if not validate_content(new_content):
+        return False
     async with pool.acquire() as conn:
         result = await conn.execute(
             "UPDATE nodes SET content = $1 WHERE id = $2 AND user_id = $3",
@@ -105,7 +126,12 @@ async def search_nodes(pool, user_id: int, query: str):
 async def handle_document(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.document.file_id
-    caption = message.caption or "Документ"
+    caption = message.caption or f"Документ ({message.document.file_name or 'без имени'})"
+
+    # Валидация содержимого
+    if not validate_content(caption):
+        await message.answer(f"❌ Заголовок документа слишком длинный. Максимум {MAX_CONTENT_LENGTH} символов.")
+        return
 
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
@@ -121,6 +147,11 @@ async def handle_photo(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.photo[-1].file_id  # самый большой размер
     caption = message.caption or "Фото"
+
+    # Валидация содержимого
+    if not validate_content(caption):
+        await message.answer(f"❌ Заголовок фото слишком длинный. Максимум {MAX_CONTENT_LENGTH} символов.")
+        return
 
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
@@ -145,6 +176,11 @@ async def handle_video(message: Message, state: FSMContext, db_pool):
     file_id = message.video.file_id
     caption = message.caption or "Видео"
 
+    # Валидация содержимого
+    if not validate_content(caption):
+        await message.answer(f"❌ Заголовок видео слишком длинный. Максимум {MAX_CONTENT_LENGTH} символов.")
+        return
+
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
 
@@ -159,6 +195,12 @@ async def handle_audio(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.audio.file_id
     caption = message.caption or "Аудио"
+
+    # Валидация содержимого
+    if not validate_content(caption):
+        await message.answer(f"❌ Заголовок аудио слишком длинный. Максимум {MAX_CONTENT_LENGTH} символов.")
+        return
+
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
     node_id = await create_node_with_file(db_pool, user_id, current_folder_id, caption, file_id, "audio")
@@ -178,6 +220,12 @@ async def handle_animation(message: Message, state: FSMContext, db_pool):
     user_id = message.from_user.id
     file_id = message.animation.file_id
     caption = message.caption or "Анимация"
+
+    # Валидация содержимого
+    if not validate_content(caption):
+        await message.answer(f"❌ Заголовок анимации слишком длинный. Максимум {MAX_CONTENT_LENGTH} символов.")
+        return
+
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
     node_id = await create_node_with_file(db_pool, user_id, current_folder_id, caption, file_id, "animation")
@@ -231,7 +279,7 @@ async def view_media(callback: CallbackQuery, db_pool):
 async def cmd_start(message: Message, state: FSMContext, db_pool):
     await state.update_data(current_folder_id=None)
     await message.answer(
-        "Добро пожаловать в хранилище БРО"
+        "Добро пожаловать в хранилище БРО\n"
     )
     await cmd_ls(message, state, db_pool)
 
@@ -250,7 +298,7 @@ async def rm_callback(callback: CallbackQuery, state: FSMContext, db_pool):
     if deleted:
         await callback.message.edit_text(f"✅ Узел {node_id} удалён.")
         await cmd_ls(callback.message, state, db_pool)
-        
+
     else:
         await callback.answer("Узел не найден или не принадлежит вам.", show_alert=True)
 
@@ -259,18 +307,16 @@ async def rm_callback(callback: CallbackQuery, state: FSMContext, db_pool):
 async def cmd_ls(message: Message, state: FSMContext, db_pool):
     data = await state.get_data()
     current_folder_id = data.get("current_folder_id")
-
+    #print(message)
     user_id = message.chat.id
     children = await get_children(db_pool, user_id, current_folder_id)
 
-    # === Заголовок: где мы находимся ===
     if current_folder_id is None:
         text = "📂 <b>Корневая папка</b>\n\n"
     else:
         path = await build_path_to_node(db_pool, current_folder_id)
         text = f"📂 <b>Текущая папка:</b>\n{path}\n\n"
 
-    # === Содержимое ===
     node_buttons = []
     if not children:
         text += "Папка пуста."
@@ -279,9 +325,8 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
         for row in children:
             node_id = row["id"]
             content = row["content"]
-            file_type = row.get("file_type")  # Может быть None
+            file_type = row.get("file_type")
 
-            # Определяем эмодзи по типу
             if file_type == "document":
                 prefix = "📎"
             elif file_type == "photo":
@@ -299,21 +344,17 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
 
             text += f"{prefix} {content}\n"
 
-            # === Кнопки для узла ===
             buttons_row = []
 
             if file_type is not None:
-                # Медиа — можно только просматривать
                 buttons_row.append(
                     InlineKeyboardButton(text="👁️ Просмотр", callback_data=f"view_{node_id}")
                 )
             else:
-                # Текстовый узел — можно открывать (как папку)
                 buttons_row.append(
-                    InlineKeyboardButton(text= content, callback_data=f"cd_{node_id}")##dxfgsdfgsdfg
+                    InlineKeyboardButton(text=content, callback_data=f"cd_{node_id}")
                 )
 
-            # Редактирование и удаление — для всех
             buttons_row.append(
                 InlineKeyboardButton(text="✏️ Ред.", callback_data=f"edit_{node_id}")
             )
@@ -323,7 +364,6 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
 
             node_buttons.append(buttons_row)
 
-    # === Глобальные действия (внизу) ===
     action_buttons = [
         InlineKeyboardButton(text="➕ Добавить", callback_data="action_add"),
         InlineKeyboardButton(text="🔍 Поиск", callback_data="action_search"),
@@ -333,10 +373,7 @@ async def cmd_ls(message: Message, state: FSMContext, db_pool):
             InlineKeyboardButton(text="↑ В корень", callback_data="cd_root")
         )
 
-    # Собираем клавиатуру
     keyboard = InlineKeyboardMarkup(inline_keyboard=node_buttons + [action_buttons])
-
-    # Отправляем сообщение
 
     await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -353,25 +390,32 @@ async def cmd_root(message: Message, state: FSMContext, db_pool):
 
 #ПЕРЕМЕЩЕНИЕ ПО ПАПКАМ
 #Вызывается при переходе в папке по кнопкам
-@router.callback_query(F.data.startswith("cd_") & F.data.len() > 3)  # длина > "cd_" (3 символа)
+@router.callback_query(F.data.startswith("cd_") & F.data.len() > 3)
 async def cd_to_folder(callback: CallbackQuery, state: FSMContext, db_pool):
-    print("cd_to_folder")
     try:
-        folder_id = int(callback.data[3:])  # берём всё после "cd_"
+        folder_id = int(callback.data[3:])
+        print(callback.data[3:])
     except ValueError:
         await callback.answer("Неверный ID папки.", show_alert=True)
         return
 
     user_id = callback.from_user.id
     async with db_pool.acquire() as conn:
-        exists = await conn.fetchval(
-            "SELECT 1 FROM nodes WHERE id = $1 AND user_id = $2",
+        # Проверяем, что узел существует и принадлежит пользователю
+        node = await conn.fetchrow(
+            "SELECT file_type FROM nodes WHERE id = $1 AND user_id = $2",
             folder_id, user_id
         )
-    if not exists:
+    if not node:
         await callback.answer("Папка не найдена или не принадлежит вам.", show_alert=True)
         return
 
+    # Проверяем, что это не медиафайл (т.е. это папка)
+    if node["file_type"] is not None:
+        await callback.answer("❌ Это медиафайл, а не папка. Нажмите «👁️ Просмотр».", show_alert=True)
+        return
+
+    # Устанавливаем новую текущую папку и обновляем отображение
     await state.update_data(current_folder_id=folder_id)
     await cmd_ls(callback.message, state, db_pool)
     await callback.answer()
@@ -443,7 +487,7 @@ async def cmd_cd(message: Message, state: FSMContext, db_pool):
         await message.answer("❌ Это медиафайл, а не папка. Используйте кнопку «👁️ Просмотр».")
         return
 
-    await state.update_data(current_folder_id=folder_id)    
+    await state.update_data(current_folder_id=folder_id)
     await cmd_ls(message, state, db_pool)
 
 
@@ -457,8 +501,8 @@ async def cmd_add(message: Message, state: FSMContext, db_pool):
         return
 
     content = args[1].strip()
-    if not content:
-        await message.answer("Текст не может быть пустым.")
+    if not validate_content(content):
+        await message.answer(f"❌ Текст не может быть пустым или превышать {MAX_CONTENT_LENGTH} символов.")
         return
 
     user_id = message.from_user.id
@@ -509,8 +553,8 @@ async def cmd_edit(message: Message, db_pool):
         return
 
     new_content = parts[2].strip()
-    if not new_content:
-        await message.answer("Текст не может быть пустым.")
+    if not validate_content(new_content):
+        await message.answer(f"❌ Текст не может быть пустым или превышать {MAX_CONTENT_LENGTH} символов.")
         return
 
     user_id = message.from_user.id
@@ -543,14 +587,14 @@ async def edit_callback(callback: CallbackQuery, state: FSMContext, db_pool):
     # Сохраняем ID узла и переходим в состояние ожидания текста
     await state.update_data(editing_node_id=node_id)
     await state.set_state(EditNode.waiting_for_content)
-    await callback.message.edit_text(f"✏️ Введите новый текст для узла {node_id}:")
+    await callback.message.edit_text(f"✏️ Введите новый текст для узла {node_id} (максимум {MAX_CONTENT_LENGTH} символов):")
     await callback.answer()
 
 @router.message(EditNode.waiting_for_content)
 async def process_edit_content(message: Message, state: FSMContext, db_pool):
     new_content = message.text.strip()
-    if not new_content:
-        await message.answer("Текст не может быть пустым. Попробуйте снова:")
+    if not validate_content(new_content):
+        await message.answer(f"❌ Текст не может быть пустым или превышать {MAX_CONTENT_LENGTH} символов. Попробуйте снова:")
         return
 
     data = await state.get_data()
@@ -579,8 +623,8 @@ async def cmd_search(message: Message, db_pool):
         return
 
     query = args[1].strip()
-    if len(query) < 2:
-        await message.answer("Поисковый запрос должен содержать минимум 2 символа.")
+    if not validate_search_query(query):
+        await message.answer(f"❌ Поисковый запрос должен содержать от 2 до {MAX_SEARCH_QUERY_LENGTH} символов.")
         return
 
     user_id = message.from_user.id
@@ -650,13 +694,13 @@ async def cmd_menu(message: Message, state: FSMContext, db_pool):
 @router.callback_query(F.data == "action_add")
 async def action_add(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddNode.waiting_for_content)
-    await callback.message.answer("✏️ Введите текст нового узла:")
+    await callback.message.answer(f"✏️ Введите текст нового узла (максимум {MAX_CONTENT_LENGTH} символов):")
     await callback.answer()
 
 @router.callback_query(F.data == "action_search")
 async def action_search(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SearchQuery.waiting_for_query)
-    await callback.message.answer("🔍 Введите текст для поиска:")
+    await callback.message.answer(f"🔍 Введите текст для поиска (от 2 до {MAX_SEARCH_QUERY_LENGTH} символов):")
     await callback.answer()
 
 @router.callback_query(F.data == "action_ls")
@@ -680,8 +724,8 @@ async def action_ls(callback: CallbackQuery, state: FSMContext, db_pool):
 @router.message(AddNode.waiting_for_content)
 async def process_add_content(message: Message, state: FSMContext, db_pool):
     content = message.text.strip()
-    if not content:
-        await message.answer("Текст не может быть пустым. Попробуйте снова:")
+    if not validate_content(content):
+        await message.answer(f"❌ Текст не может быть пустым или превышать {MAX_CONTENT_LENGTH} символов. Попробуйте снова:")
         return
 
     user_id = message.from_user.id
@@ -697,13 +741,13 @@ async def process_add_content(message: Message, state: FSMContext, db_pool):
         logger.exception("Ошибка при создании узла")
         await message.answer("❌ Не удалось создать узел.")
 
-    await state.clear()  # выходим из состояния добавления
+    await state.set_state(None)  # выходим из состояния добавления
 
 @router.message(SearchQuery.waiting_for_query)
 async def process_search_query(message: Message, state: FSMContext, db_pool):
     query = message.text.strip()
-    if len(query) < 2:
-        await message.answer("Запрос должен содержать минимум 2 символа. Попробуйте снова:")
+    if not validate_search_query(query):
+        await message.answer(f"❌ Запрос должен содержать от 2 до {MAX_SEARCH_QUERY_LENGTH} символов. Попробуйте снова:")
         return
 
     user_id = message.from_user.id
